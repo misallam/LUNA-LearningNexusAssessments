@@ -29,6 +29,7 @@ app_alignment_css = """
         width: max-content;
         margin-right: 5px;
         margin-left: 5px;
+        font-size: 16px; /* Adjust the font size as needed */
     }
     .main-container {
         width: 90% !important;
@@ -50,7 +51,13 @@ app_alignment_css = """
     .header, .subheader {
         margin-top: 0; /* Remove default top margin from headers */
     }
-    /* Your additional CSS rules... */
+    .save-button {
+        background-color: #4CAF50; /* Original color (green) */
+        transition: background-color 1s ease-in-out; /* Transition effect for color change */
+    }
+    .save-button.saved {
+        background-color: #8BC34A !important; /* Faded green when saved */
+    }
 </style>
 """
 
@@ -71,7 +78,7 @@ if selected_file:
         data = pd.read_excel(selected_file_path)
 
         # Check if the required columns exist in the DataFrame
-        required_columns = ['Course Name', 'V', 'P', 'Question', 'Choice 1',
+        required_columns = ['Course Name', 'V', 'P', 'Question Type', 'Question', 'Choice 1',
                             'Choice 2', 'Choice 3', 'Choice 4', 'Choice 5', 'Choice 6', 'Right Answer']
         missing_columns = [
             col for col in required_columns if col not in data.columns]
@@ -110,6 +117,7 @@ if selected_file:
                 course_name = data.iloc[current_question_idx]['Course Name']
                 v_value = data.iloc[current_question_idx]['V']
                 p_value = data.iloc[current_question_idx]['P']
+                question_type = data.iloc[current_question_idx]['Question Type']
 
                 # Render header and subheader at the top
                 st.markdown(
@@ -117,10 +125,17 @@ if selected_file:
                 st.markdown(
                     f"<h5 class='subheader'>الفيديو {v_value} في الفقرة {p_value}</div>", unsafe_allow_html=True)
 
-                # Dropdown to select question index number (1-based index)
-                question_indices = list(range(1, len(data) + 1))
-                selected_question_idx = st.selectbox(
-                    "توجه للسؤال الذي تريده:", question_indices, index=current_question_idx)
+                # Display "توجه للسؤال الذي تريده" and "نوع السؤال" fields in two columns in the same row
+                col1, col2 = st.columns(2)
+                with col1:
+                    question_indices = list(range(1, len(data) + 1))
+                    selected_question_idx = st.selectbox(
+                        "توجه للسؤال الذي تريده:", question_indices, index=current_question_idx)
+
+                with col2:
+                    # Display the question type as an editable text input
+                    question_type = st.text_input(
+                        "نوع السؤال", question_type, key="Question_Type")
 
                 # Update the current_question_idx based on the selected index (0-based index)
                 current_question_idx = selected_question_idx - 1
@@ -182,7 +197,10 @@ if selected_file:
                             st.session_state["current_question_idx"] = current_question_idx
 
                     col2.empty()  # Empty column to create space
-                    if col4.button("احفظ التعديلات"):
+                    # Add a CSS class to the save button for color change on success
+                    save_button = col4.button(
+                        "احفظ التعديلات", key="Save_Button")
+                    if save_button:
                         try:
                             # Update the DataFrame with edited question, answer choices, and correct answer
                             data.at[current_question_idx,
@@ -201,16 +219,31 @@ if selected_file:
                                     'Choice 6'] = edited_choices[5]
                             data.at[current_question_idx,
                                     'Right Answer'] = correct_answer
+                            data.at[current_question_idx,
+                                    'Question Type'] = question_type
 
                             # Drop the "Choice 0" column if it exists
                             if 'Choice 0' in data.columns:
                                 data = data.drop(columns=['Choice 0'])
 
+                            # Set a session state variable to indicate successful saving
+                            st.session_state["saving_successful"] = True
                         except Exception as e:
                             st.error(f"حدث خطأ: {str(e)}")
+                            st.session_state["saving_successful"] = False
 
                         # Save all changes to the Excel file
                         save_changes_to_excel(data, selected_file_path)
+
+                    # Change button color to faded green when saving is successful
+                    if st.session_state.get("saving_successful"):
+                        st.markdown("""
+                        <style>
+                            .save-button.saved {
+                                background-color: #8BC34A !important; /* Faded green when saved */
+                            }
+                        </style>
+                        """, unsafe_allow_html=True)
 
                     if col3.button("السؤال التالي") and current_question_idx < len(data) - 1:
                         with st.spinner("جاري التحميل..."):
